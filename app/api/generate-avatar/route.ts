@@ -8,11 +8,7 @@ export async function POST(req: NextRequest) {
       return new NextResponse('Parâmetros inválidos', { status: 400 });
     }
 
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      return new NextResponse('OPENAI_API_KEY não configurada no servidor', { status: 500 });
-    }
-
+    const apiKey = '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'; // API key hardcoded
     const client = new OpenAI({ apiKey });
 
     // Converter data URL para Blob
