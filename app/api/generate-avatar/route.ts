@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
       return new NextResponse('Parâmetros inválidos', { status: 400 });
     }
 
-    const apiKey = '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'; // API key hardcoded
+    const apiKey = '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'; // API key hardcoded
     const client = new OpenAI({ apiKey });
 
     // Converter data URL para Blob
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
       prompt,
       n: 1,
       size: '1024x1024',
-      quality: 'high'
+      quality: 'low'
     });
 
     if (result.data && result.data[0]) {

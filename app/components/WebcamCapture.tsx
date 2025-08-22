@@ -37,6 +37,27 @@ const WebcamCapture = () => {
   const [progress, setProgress] = useState<number>(0);
   const [loadingMessage, setLoadingMessage] = useState<string>('');
   
+  // Frases motivacionais para o carregamento
+  const loadingPhrases = [
+    "🎯 Preparando sua transformação digital...",
+    "🚀 Carregando o futuro da sua carreira...",
+    "✨ Misturando tecnologia e criatividade...",
+    "🎨 A IA está desenhando seu avatar...",
+    "🌟 Criando algo incrível para você...",
+    "💫 Transformando pixels em possibilidades...",
+    "🎭 Preparando seu personagem profissional...",
+    "🔮 Visualizando seu futuro digital...",
+    "🎪 A mágica está acontecendo...",
+    "🌈 Construindo sua identidade virtual...",
+    "🎪 Preparando o palco da sua carreira...",
+    "🚀 Decolando para o sucesso...",
+    "🎯 Mirando na excelência...",
+    "✨ Polindo cada detalhe...",
+    "🌟 Quase lá, aguarde um momento..."
+  ];
+  
+  const [currentPhraseIndex, setCurrentPhraseIndex] = useState(0);
+  
   // Dados para captura de contato
   const [contactData, setContactData] = useState({
     name: '',
@@ -46,6 +67,7 @@ const WebcamCapture = () => {
     role: '',
     interests: []
   });
+  const [avatarBase64, setAvatarBase64] = useState<string | null>(null);
 
   // Seleções das perguntas
   const [careerFocus, setCareerFocus] = useState<string>('');
@@ -266,6 +288,10 @@ const WebcamCapture = () => {
   ];
 
   const handleNext = () => {
+    if (activeStep === steps.length - 1) {
+      submitContact();
+      return;
+    }
     setActiveStep((prevActiveStep) => prevActiveStep + 1);
   };
 
@@ -327,6 +353,66 @@ const WebcamCapture = () => {
     });
   };
 
+  const convertImageToJpegBase64 = async (src: string, maxSize = 512, quality = 0.8): Promise<string> => {
+    return new Promise<string>((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const scale = Math.min(maxSize / img.width, maxSize / img.height, 1);
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Canvas não suportado'));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve((dataUrl.split(',')[1]) || '');
+      };
+      img.onerror = () => reject(new Error('Falha ao carregar imagem'));
+      img.src = src;
+    });
+  };
+
+  const submitContact = async (): Promise<void> => {
+    const safeAvatar = avatarBase64 && avatarBase64.length > 700000 ? avatarBase64.slice(0, 700000) : avatarBase64;
+    const payload = {
+      nome: contactData.name,
+      email: contactData.email,
+      telefone: contactData.phone,
+      empresa: contactData.company,
+      avatar: safeAvatar || null,
+    };
+
+    try {
+      const response = await fetch('/api/cadastrar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        let message = 'Erro ao enviar dados';
+        try {
+          const errJson = await response.json();
+          message = errJson?.message || errJson?.error || JSON.stringify(errJson) || message;
+        } catch {
+          try {
+            const text = await response.text();
+            message = text || message;
+          } catch {}
+        }
+        throw new Error(message);
+      }
+    } catch (err: any) {
+      setError(`Não foi possível enviar seus dados: ${err?.message || 'erro desconhecido'}`);
+    }
+  };
+
   const capture = useCallback(async () => {
     if (webcamRef.current) {
       const imageSrc = webcamRef.current.getScreenshot();
@@ -340,7 +426,18 @@ const WebcamCapture = () => {
     setIsProcessing(true);
     setError(null);
     setProgress(5);
-    setLoadingMessage('Preparando imagem...');
+    setCurrentPhraseIndex(0);
+    setLoadingMessage(loadingPhrases[0]);
+    
+    // Sistema de rotação de frases
+    const phraseInterval = setInterval(() => {
+      setCurrentPhraseIndex(prev => {
+        const next = (prev + 1) % loadingPhrases.length;
+        setLoadingMessage(loadingPhrases[next]);
+        return next;
+      });
+    }, 3000); // Troca frase a cada 3 segundos
+    
     let tick: any = null;
     try {
       setLoadingMessage('Comprimindo imagem...');
@@ -376,8 +473,36 @@ const WebcamCapture = () => {
       const data = await response.json();
       if (data?.imageUrl) {
         setProcessedImage(data.imageUrl);
+        // Converter para base64 comprimido (JPEG)
+        try {
+          if (typeof data.imageUrl === 'string') {
+            const jpegBase64 = await convertImageToJpegBase64(data.imageUrl, 512, 0.7);
+            setAvatarBase64(jpegBase64);
+          } else {
+            setAvatarBase64(null);
+          }
+        } catch {
+          // fallback: tenta ler como estava antes
+          if (typeof data.imageUrl === 'string' && data.imageUrl.startsWith('data:image')) {
+            const base64Part = data.imageUrl.split(',')[1] || '';
+            setAvatarBase64(base64Part);
+          } else if (typeof data.imageUrl === 'string') {
+            const res = await fetch(data.imageUrl);
+            const blob = await res.blob();
+            const reader = new FileReader();
+            const base64 = await new Promise<string>((resolve, reject) => {
+              reader.onloadend = () => {
+                const result = reader.result as string;
+                resolve((result.split(',')[1]) || '');
+              };
+              reader.onerror = () => reject(new Error('Falha ao ler imagem'));
+              reader.readAsDataURL(blob);
+            });
+            setAvatarBase64(base64);
+          }
+        }
         setProgress(100);
-        setLoadingMessage('Concluído!');
+        setLoadingMessage('🎉 Avatar criado com sucesso!');
       } else {
         throw new Error('Resposta inválida da API');
       }
@@ -386,13 +511,15 @@ const WebcamCapture = () => {
       setError('Erro ao gerar avatar. Verifique a chave da API no servidor e tente novamente.');
     } finally {
       if (tick) clearInterval(tick);
+      clearInterval(phraseInterval);
       setTimeout(() => {
         setIsProcessing(false);
         setProgress(0);
         setLoadingMessage('');
+        setCurrentPhraseIndex(0);
       }, 400);
     }
-  }, [imgSrc, careerFocus, techInterest, futureVision]);
+  }, [imgSrc, careerFocus, techInterest, futureVision, loadingPhrases]);
 
   const retake = useCallback(() => {
     setImgSrc(null);
@@ -483,13 +610,25 @@ const WebcamCapture = () => {
       case 3:
         return (
           <div className="modern-card" style={{ padding: '42px', marginBottom: '32px' }}>
-            <Typography variant="h5" gutterBottom sx={{ 
+            <Typography variant="h3" gutterBottom sx={{ 
               textAlign: 'center', 
               mb: 4,
-              fontWeight: 700,
-              color: 'var(--foreground)'
+              fontWeight: 800,
+              color: 'var(--foreground)',
+              fontSize: '2.5rem'
             }}>
-              📸 Capture sua foto para o avatar
+              Hora da foto!
+            </Typography>
+            
+            <Typography variant="h5" sx={{ 
+              textAlign: 'center', 
+              mb: 4,
+              color: 'var(--foreground)',
+              opacity: 0.8,
+              fontWeight: 500,
+              lineHeight: 1.4
+            }}>
+              Posicione-se para a foto. Ela será a base para a criação do seu avatar.
             </Typography>
             
             <Box sx={{ 
@@ -550,7 +689,6 @@ const WebcamCapture = () => {
                   size="large"
                   className="modern-button btn-primary"
                   sx={{ width: '100%', fontSize: '1.6rem', fontWeight: 800, textTransform: 'none', borderRadius: '9999px', paddingY: '18px' }}
-                  startIcon={<CameraAlt />}
                 >
                   📸 Capturar Foto
                 </Button>
@@ -573,7 +711,6 @@ const WebcamCapture = () => {
                       borderRadius: '9999px',
                       paddingY: '18px'
                     }}
-                    startIcon={<Refresh />}
                   >
                     🔄 Tirar Outra
                   </Button>
@@ -584,10 +721,9 @@ const WebcamCapture = () => {
                       disabled={isProcessing}
                       size="large"
                       className="modern-button btn-success"
-                      startIcon={isProcessing ? <CircularProgress size={24} color="inherit" /> : <Send />}
                       sx={{ width: '100%', fontSize: '1.6rem', fontWeight: 800, textTransform: 'none', borderRadius: '9999px', paddingY: '18px' }}
                     >
-                      {isProcessing ? '🔄 Gerando Avatar...' : '✨ Criar Avatar Profissional'}
+                      ✨ Criar Avatar Profissional
                     </Button>
                   )}
                 </>
@@ -668,61 +804,32 @@ const WebcamCapture = () => {
         {isProcessing && (
           <div className="loading-overlay">
             <div className="loading-card">
-              <div style={{ marginBottom: 16 }}>
-                <CircularProgress size={56} thickness={4} />
+              <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'center' }}>
+                <CircularProgress size={64} thickness={4} />
               </div>
-              <Typography variant="h6" sx={{ fontWeight: 800, mb: 1, textAlign: 'center' }}>
+              <Typography variant="h5" sx={{ fontWeight: 800, mb: 2, textAlign: 'center' }}>
                 Gerando seu avatar...
               </Typography>
-              <Typography variant="body2" sx={{ opacity: 0.85, mb: 2, textAlign: 'center' }}>
+              <Typography variant="h6" sx={{ 
+                opacity: 0.9, 
+                mb: 3, 
+                textAlign: 'center',
+                minHeight: '80px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '20px',
+                background: 'rgba(102, 126, 234, 0.1)',
+                borderRadius: '16px',
+                border: '1px solid rgba(102, 126, 234, 0.2)',
+                fontWeight: 500,
+                lineHeight: 1.4
+              }}>
                 {loadingMessage || 'Aguarde alguns instantes'}
-              </Typography>
-              <div className="progress-track">
-                <div className="progress-fill" style={{ width: `${progress}%` }} />
-              </div>
-              <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', mt: 1, opacity: 0.7 }}>
-                {progress}%
               </Typography>
             </div>
           </div>
         )}
-
-        {/* Stepper */}
-        <div className="modern-card" style={{ width: '100%', padding: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            {steps.map((label, index) => (
-              <div key={label} style={{ 
-                display: 'flex', 
-                flexDirection: 'column', 
-                alignItems: 'center',
-                flex: 1
-              }}>
-                <div style={{
-                  width: '40px',
-                  height: '40px',
-                  borderRadius: '50%',
-                  background: index <= activeStep ? 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)' : '#e5e7eb',
-                  color: 'white',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: 'bold',
-                  marginBottom: '8px'
-                }}>
-                  {index + 1}
-                </div>
-                <Typography variant="caption" sx={{ 
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  color: index <= activeStep ? '#ef4444' : '#6b7280',
-                  textAlign: 'center'
-                }}>
-                  {label}
-                </Typography>
-              </div>
-            ))}
-          </div>
-        </div>
 
         {/* Step Content */}
         {renderStepContent(activeStep)}
@@ -752,13 +859,22 @@ const WebcamCapture = () => {
               }
             }}
           >
-            <i className="fa-solid fa-arrow-left"></i>
+            <img 
+              src="/anterior.png" 
+              alt="Anterior" 
+              style={{ 
+                width: '64px', 
+                height: '64px', 
+                marginRight: '8px',
+                filter: activeStep === 0 ? 'grayscale(100%)' : 'none'
+              }} 
+            />
             Anterior
           </Button>
           <Button
             variant="contained"
             onClick={handleNext}
-            disabled={activeStep === steps.length - 1}
+            disabled={false}
             className="modern-button nav-button nav-button-primary"
             sx={{
               borderRadius: '9999px',
@@ -776,7 +892,15 @@ const WebcamCapture = () => {
             }}
           >
             Próximo
-            <i className="fa-solid fa-arrow-right"></i>
+            <img 
+              src="/avancar.png" 
+              alt="Avançar" 
+              style={{ 
+                width: '64px', 
+                height: '64px', 
+                marginLeft: '8px'
+              }} 
+            />
           </Button>
         </Stack>
       </Stack>

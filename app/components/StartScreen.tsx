@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback } from 'react';
-import { Button, Stack, Typography } from '@mui/material';
+import { Button, Stack, Typography, Box } from '@mui/material';
+import Image from 'next/image';
 
 type StartScreenProps = {
   onStart: () => void;
@@ -15,7 +16,7 @@ export default function StartScreen({ onStart }: StartScreenProps) {
   return (
     <div className="kiosk-shell">
       <div className="kiosk-hero modern-card" style={{ padding: '48px', color: '#fff', background: '#111827', border: '1px solid rgba(255,255,255,0.06)' }}>
-        <h1 className="kiosk-title" style={{ color: '#fff', WebkitTextFillColor: 'unset', background: 'none' }}>Ricohpel - Exponovatech 2025</h1>
+        <h1 className="kiosk-title" style={{ color: '#fff', WebkitTextFillColor: 'unset', background: 'none' }}>Bem-vindo(a)!</h1>
         <Typography
           variant="h4"
           component="h2"
@@ -26,7 +27,7 @@ export default function StartScreen({ onStart }: StartScreenProps) {
             fontSize: { xs: '1.75rem', sm: '2.25rem' }
           }}
         >
-          Gerador de Avatar Profissional
+          Crie seu Avatar Exclusivo pelo gerador de imagens da Ricohpel e ainda concorra a Prêmios Incríveis!
         </Typography>
         <Typography
           variant="h6"
@@ -39,8 +40,29 @@ export default function StartScreen({ onStart }: StartScreenProps) {
             mb: 4
           }}
         >
-          Toque em INICIAR para criar seu avatar 3D com base na sua foto e preferências.
+          
         </Typography>
+        
+        {/* Imagem do Avatar */}
+        <Box sx={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          mb: 4,
+          maxWidth: '300px',
+          mx: 'auto'
+        }}>
+          <Image
+            src="/Avatar.png"
+            alt="Avatar Profissional"
+            width={300}
+            height={300}
+            style={{
+              borderRadius: '16px',
+              objectFit: 'contain'
+            }}
+          />
+        </Box>
+        
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} className="kiosk-actions" sx={{ justifyContent: 'center' }}>
           <Button
             variant="contained"
